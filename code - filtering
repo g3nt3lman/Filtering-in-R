@@ -1,0 +1,134 @@
+rm(list=ls())
+################# LOAD LIBRARIES #######################
+
+library("stringr")
+library("RJDBC")
+library("openxlsx")
+library("data.table")
+library("dplyr")
+
+################# DEFINE PERIOD #######################
+
+periodid=2073
+################## CONNECT WITH Oracle  ########################
+
+
+SIRPRD  <- "##############################"  
+country="##"
+
+drv <- JDBC(
+  "oracle.jdbc.OracleDriver"
+  , classPath="C:/########################/ojdbc7.jar", "'")
+
+con_SIRVAL <- dbConnect(
+  drv
+  , paste0("jdbc:oracle:thin:@//",#########)
+  , "LOGIN", "PASSWORD") 
+
+################## DOWNLOAD DATA FROM SIRVAL  ########################
+
+sql_querry = sprintf("select a.nc_periodid, a.ac_cref as ean, b.ac_crefdescription as desc_cad, a.f_nan_key as nankey,
+                     c.npr_long_description, e.cnan, e.pc, d.ac_retailer as cadena, 
+                     sum(a.nc_slot1) as unid, sum(a.nc_slot2) as valor
+
+                     from vldrawdata_es.rawdata a, vldrawdata_es.descriptions b,VLDCHECKES.Fac_MercadoNewSemanal d,
+                     VLDCHECKES.nankeys_LINEATSR c, VLDCHECKES.nankeys_nan2cnan e 
+
+                     where a.nc_periodid = (%s) and d.period = (%s-989) and A.AC_NSHOPID=d.AC_NSHOPID 
+                     and f_nan_key=c.nan_key(+) and f_nan_key=e.nan_key(+) 
+                     and npr_long_description is null
+                     and a.ac_cref=b.AC_CREF and a.nc_hash_signature=b.nc_hash_signature 
+                     and ac_dtgroup='VOLUMETRIC'  
+                     group by a.nc_periodid, a.ac_cref, ac_crefdescription, f_nan_key, npr_long_description, cnan, pc, d.ac_retailer",
+                     periodid,periodid)
+
+output= data.table(dbGetQuery(con_SIRVAL, sql_querry))
+
+################## FILTER BY VALOR  ########################
+out_main=output
+
+output$ID_n <- seq.int(nrow(output))
+
+output$semana=output$NC_PERIODID +16966
+
+d_valor=output[output$VALOR>200,]
+
+################## FILTER BY PC  ########################
+
+#table(d_valor$PC)
+
+PC_NEED=c( "0", "0379", "7777", "9999")
+
+i=0
+indexes_to_stay={}
+for (i in PC_NEED){
+  
+  indexes_to_stay=c(indexes_to_stay ,(which(d_valor$PC==i)))
+  print(i)
+  
+} 
+
+d_valor_pc_na=d_valor[which(is.na(d_valor$PC)),]
+d_valor_pc_prep=d_valor[indexes_to_stay,]
+d_valor_pc=rbind(d_valor_pc_prep, d_valor_pc_na)
+
+################## FILTER BY DESCRIPTION  ############################
+
+
+DESC_ES_NOT_NEED=c( "hombre", "mujer", "congelado", "cong", "colchon", "pantalon", "bermuda", "sandalia", "camisa", "camiseta", "cama",
+                    "niño", "niña", "edt", "edp", "agua", "bacon", "desalad", "queso", "manchego", "requeson", "aceite", "bebe", "jamon serrano", 
+                    "jamon iberico",
+                    "pack", "set", "body", "taller", "toalla", "nino", "nina")
+DESC_ES_NOT_NEED=toupper(DESC_ES_NOT_NEED)
+
+
+i=0
+indexes_to_reject={}
+for (i in DESC_ES_NOT_NEED){
+  
+  indexes_to_reject=c(indexes_to_reject ,as.vector(str_which(d_valor_pc$DESC_CAD,i,negate = FALSE)))
+  print(i)
+  
+} 
+
+indexes_to_reject_unique=unique(indexes_to_reject)
+FINAL_OUTPUT=d_valor_pc[!indexes_to_reject_unique,]
+
+################## FILTER BY NAN KEYS  ############################
+
+nan_keys_not=as.vector(read.xlsx("C:/Users/#################################/NAN Key part 2_XX.xlsx"))
+
+i=0
+indexes_to_reject={}
+for (i in nan_keys_not$NAN.Key){
+
+  indexes_to_reject=c(indexes_to_reject ,(which(FINAL_OUTPUT$NANKEY==i)))
+  print(i)
+  
+} 
+
+indexes_to_reject_unique=unique(indexes_to_reject)
+FINAL_OUTPUT2=FINAL_OUTPUT[!indexes_to_reject_unique,]
+
+################## SAVE FILE  ############################
+
+csvFileName_output <- paste("QuedanFuera_" ,
+                     format(Sys.time(), "%d-%m-%Y %H.%M"),
+                     ".xlsx",sep="")
+
+csvFileName_FINAL_OUTPUT <- paste("QuedanFuera_FILTERD_" ,
+                            format(Sys.time(), "%d-%m-%Y %H.%M"),
+                            ".xlsx",sep="")
+
+setwd("C:/Users/####################################")
+write.xlsx(output, csvFileName_output, rowNames = F)
+write.xlsx(FINAL_OUTPUT2, csvFileName_FINAL_OUTPUT, rowNames = F)
+
+
+
+
+
+
+
+
+
