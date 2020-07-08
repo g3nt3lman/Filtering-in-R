@@ -5,3 +5,5 @@ was causing excel freezing, crushing or with a stroke of luck finally I managed 
 excel to calculate my filtering conditions.
 
 Therefore I created script that filters this file, and now it takes about 20 sec to perform this action.
+
+In later version of the script all inputs was provided by team of users in file located on google drive.
